@@ -1,7 +1,7 @@
 [project]
 name = "arccharcalc"
 version = "0.1.0"
-description = "Insulator flashover arc characteristics caclulator"
+description = "Insulator flashover characteristics caclulator"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
