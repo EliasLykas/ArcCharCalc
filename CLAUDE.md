@@ -4,12 +4,17 @@ Python tool that extracts breakdown characteristics of MV insulators from
 oscilloscope measurements (LeCroy CSV). It replaces Petros's Excel workflow and
 must reproduce its numbers. Thesis-wide rules: see `../CLAUDE.md`.
 
-## How I want to work (I'm learning Python)
-- This is my first real Python project. My goal is to learn, not just to finish.
-- Default: explain, give hints, small examples and reviews. Do NOT write complete
-  functions or modules unless I explicitly say "write it".
-- Before changing any file, tell me what you will change and why, and wait.
-- When I get an error, help me read the traceback first. Don't jump to the fix.
+## How I want to work
+- I'm learning Python, but I want to move faster: you may write the code.
+- Work in small steps: one function or one change at a time.
+  Before writing, show a short plan and wait for my OK.
+- After writing, explain briefly what the code does. Explain line by line
+  anything non-obvious (new syntax, numpy tricks, Python idioms).
+- Prefer simple, readable code over clever code. Ask before adding a new dependency.
+- Every function gets a docstring and type hints.
+- Every numerical result must be checked against Petros's Excel values
+  (`../data/reference/`) before it counts as done. Propose how to check it.
+- When there is an error, first show me how to read the traceback, then fix it.
 - Answer in Greek. Code, names and comments in English.
 
 ## Project layout
