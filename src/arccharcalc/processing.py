@@ -92,3 +92,40 @@ def charge_uc(t: np.ndarray, i: np.ndarray, t_start: float) -> np.ndarray:
     """
     i = np.where(t >= t_start, i, 0.0)
     return np.concatenate([[0.0], np.cumsum((i[1:] + i[:-1]) / 2 * np.diff(t))])
+
+
+# --- Charge uncertainty: PROPOSAL, commented out until discussed with Petros ---
+# The baseline noise is not white (correlated over up to ~500 ns), so the standard
+# error of the offset is NOT sigma / sqrt(N). Instead, split the offset window into
+# blocks, take the mean of each block, and use the scatter of those means.
+# Measured on 4 shots (2026-10-30): for blocks of 100-500 samples the estimate is
+# stable and 6-9 times larger than the white-noise formula (C4 ~0.05 A, C2 ~0.0006 A,
+# C3 ~0.009 V); for blocks of 1000+ samples only 2-4 blocks remain and it is unreliable.
+# The offset error is constant, so it integrates linearly: error(Q) = SE * (t - t_start).
+# Covers only the offset; not the noise inside the pulse, nor the error of t_start.
+#
+# OFFSET_SE_BLOCK = 250  # samples (= ns), inside the 100-500 plateau
+# OFFSET_SE_MIN_BLOCKS = 8
+#
+#
+# def offset_se(t: np.ndarray, x: np.ndarray, t_window: float) -> float:
+#     """Return the standard error of the offset of x, in the units of x (volts).
+#
+#     Computed from the scatter of block means over the offset window (before t_window).
+#     """
+#     window = x[t < t_window]
+#     n_blocks = len(window) // OFFSET_SE_BLOCK
+#     if n_blocks < OFFSET_SE_MIN_BLOCKS:
+#         raise ValueError("Offset window too short to estimate the offset error")
+#     blocks = window[: n_blocks * OFFSET_SE_BLOCK].reshape(n_blocks, OFFSET_SE_BLOCK)
+#     return float(blocks.mean(axis=1).std(ddof=1) / np.sqrt(n_blocks))
+#
+#
+# def charge_error_uc(t: np.ndarray, t_start: float, offset_se_a: float) -> np.ndarray:
+#     """Return the charge error (uC) caused by the offset error (A), zero before t_start."""
+#     return offset_se_a * np.clip(t - t_start, 0.0, None)
+#
+#
+# Use in main(), for each current channel:
+#     se = offset_se(t, channels[name], t_window) * CURRENT_SCALE   # A
+#     print(f"{name} offset error (A): {se:.4f}, charge error (uC): {charge_error_uc(t, onset, se)[k]:.3f}")
