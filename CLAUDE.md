@@ -4,6 +4,9 @@ Python tool that extracts breakdown characteristics of MV insulators from
 oscilloscope measurements (LeCroy CSV). It replaces Petros's Excel workflow and
 must reproduce its numbers. Thesis-wide rules: see `../CLAUDE.md`.
 
+Plan and current status: `plan/PLAN.md`. Read it at the start of every session
+and update its "Κατάσταση" section when a step is done.
+
 ## How I want to work
 - I'm learning Python, but I want to move faster: you may write the code.
 - Work in small steps: one function or one change at a time.
