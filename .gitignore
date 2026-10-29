@@ -9,5 +9,8 @@ wheels/
 # Virtual environments
 .venv
 
-# Windows 
+# Windows
 desktop.ini
+
+# Plan and reports: local working notes, not versioned
+plan/
