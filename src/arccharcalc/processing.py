@@ -13,9 +13,10 @@ BASELINE_US = 2.0
 ONSET_SIGMAS = 8
 ONSET_SAMPLES = 20
 
-# The offset window ends this long before the onset, so the front and any
-# interference just before it stay out of the average.
-ONSET_MARGIN_US = 0.5
+# The offset window ends this long before the onset, so the start of the front
+# stays out of the average. The front begins ~0.1 us before C3 exceeds 8 sigma
+# (measured on 10 shots, 2026-10-29); 0.2 us leaves a safety factor of 2.
+ONSET_MARGIN_US = 0.2
 
 
 def find_onset(t: np.ndarray, x: np.ndarray) -> float:
