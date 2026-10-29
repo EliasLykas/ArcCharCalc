@@ -17,9 +17,7 @@ def read_lecroy_csv(path: Path) -> tuple[np.ndarray, np.ndarray]:
     return t*1e6, v
 
 
-def read_shot(
-    level_dir: Path, level: str, shot: int
-) -> tuple[np.ndarray, dict[str, np.ndarray]]:
+def read_shot(level_dir: Path, level: str, shot: int) -> tuple[np.ndarray, dict[str, np.ndarray]]:
     """Read channels C2, C3 and C4 of one shot.
 
     Files are named like `C3_15.5_00003.csv` inside the folder of the charging
