@@ -39,6 +39,14 @@ and update its "Κατάσταση" section when a step is done.
   commit message (English, imperative, e.g. "Add CSV reader").
 - `git status`, `git diff` and `git log` are fine.
 
+## Phase 2 conventions (agreed 2026-10-31, details in `plan/PLAN.md`)
+- "Fit" means only scaling + alignment (matching): fixed shape, free factor k and shift τ. Never free T1, T2.
+- The theoretical double exponential comes from Marx parameters (`MarxParams` in `reference.py`); pu = relative to its own peak (unit amplitude).
+- `match` outputs `u_true = k·u` (k applied to the measurement, always > 0) and `t_sync = t − τ`. Polarity is a separate quantity.
+- The Up feature stays the raw one; k is a console diagnostic. τ is not the `t_start` of the charge.
+- Work only on Phase A (reference from the withstand shot) until told otherwise; Phase B comes later.
+- `reference.py` was edited by me (the user) after you wrote it: check `git diff`/the file before changing it, and ask about the open n-scaling inconsistency listed in `plan/PLAN.md`.
+
 ## Verification
 - Every number we compute must be checked against Petros's Excel values
   (`../data/reference/`) before it counts as done.
