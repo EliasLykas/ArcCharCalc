@@ -28,10 +28,9 @@ def time_constants(m: MarxParams) -> tuple[float, float]:
 
     With R in Ω and C in nF the product is in ns, hence the factor 1e-3.
     """
-    c_c = m.c_c
-    r_f = m.r_f
-    t1 = m.r_t * (c_c + m.c_f) * 1e-3
-    t2 = r_f * c_c * m.c_f / (c_c + m.c_f) * 1e-3
+  
+    t1 = m.r_t * (m.c_c + m.c_f) * 1e-3
+    t2 = m.r_f * m.c_c * m.c_f / (m.c_c + m.c_f) * 1e-3
     return t1, t2
 
 
