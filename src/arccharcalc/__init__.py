@@ -1,6 +1,7 @@
 import sys
 from pathlib import Path
 
+from arccharcalc.generator import double_exp_pu
 from arccharcalc.io_lecroy import read_shot
 import numpy as np
 
@@ -12,14 +13,16 @@ from arccharcalc.processing import (
     offset_window_end,
     voltage_kv,
 )
+from arccharcalc.reference import match
 
 # Charge is printed this long after the onset (a fixed point, only for checks).
 CHARGE_AT_US = 10.0
 
 
 def main() -> None:
-    # usage: arccharcalc <level folder> <level> <shot>, e.g. ".../15.5kV" 15.5 3
+    # usage: arccharcalc <level folder> <level> <shot> [polarity], e.g. ".../15.5kV" 15.5 3 +1
     level_dir, level, shot = Path(sys.argv[1]), sys.argv[2], int(sys.argv[3])
+    polarity = int(sys.argv[4]) if len(sys.argv) > 4 else 1
     t, channels = read_shot(level_dir, level, shot)
 
     print("Samples:          ", len(t))
@@ -33,6 +36,11 @@ def main() -> None:
     print(f"Offset window end (us): {t_end:.3f}")
     print(f"C3 baseline: mean {mean:.4f} V, std {std:.4f} V, half difference {halves:+.4f} V")
     print(f"Up (kV): {u.max():.3f}")
+
+    # Phase A: theoretical double exponential with the measured peak, fixed on the same axis t.
+    u_ref = (polarity * u).max() * double_exp_pu(t)
+    tau, tau_se, rms = match(t, u, t, u_ref, polarity)
+    print(f"tau (us): {tau:+.4f} ± {tau_se:.4f}, residual rms (kV): {rms:.3f}")
 
     # Current channels use the same offset window as C3; charge starts at the onset.
     onset = find_onset(t, channels["C3"])

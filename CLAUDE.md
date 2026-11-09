@@ -44,6 +44,8 @@ and update its "Κατάσταση" section when a step is done.
   of the generator (`MarxParams`). No U0, η or Up_ref.
 - Phase A reference = `u_withstand.max() · double_exp_pu(t − τ)`: fixed shape AND fixed amplitude, the only free
   parameter is the shift τ. Never free T1, T2. `t_sync = t − τ`. Polarity is a separate quantity.
+- Matching shifts the MEASURED time by τ onto a FIXED reference given as samples (`match` in `reference.py`,
+  shared by Phase A and B). Window = measured front, 30% → 90% of the reference peak (or the measured max).
 - The name `reference.py` is kept for the future time-fitting (matching) module.
 - τ is not the `t_start` of the charge.
 - Work only on Phase A (reference from the withstand shot) until told otherwise; Phase B comes later.

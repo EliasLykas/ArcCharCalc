@@ -1,9 +1,7 @@
-"""Reference voltage: the theoretical double exponential shifted onto a measured wave."""
+"""Time alignment: shift a measured wave in time so that its front matches a fixed reference."""
 
 import numpy as np
 from scipy.optimize import least_squares
-
-from arccharcalc.generator import LAB_MARX, MarxParams, double_exp_pu, double_exp_slope
 
 # Residual (kV) above which a robust loss starts to down-weight a sample: about
 # 2x the residual rms of the withstand shot (0.5 kV, scratch 2026-10-31).
@@ -14,21 +12,25 @@ ROBUST_SCALE_KV = 1.0
 def match(
     t: np.ndarray,
     u: np.ndarray,
-    amplitude: float,
+    t_ref: np.ndarray,
+    u_ref: np.ndarray,
     polarity: int,
-    t_from: float,
-    t_to: float,
-    tau0: float,
-    m: MarxParams = LAB_MARX,
+    lo: float = 0.3,
+    hi: float = 0.9,
     loss: str = "linear",
 ) -> tuple[float, float, float]:
-    """Return (tau, tau_se, rms) in (μs, μs, kV): shift of the theoretical wave onto u.
+    """Return (tau, tau_se, rms) in (μs, μs, kV): time subtracted from the measurement.
 
-    Model: amplitude * double_exp_pu(t - tau), fitted to polarity * u over
-    t_from <= t <= t_to; tau is the only unknown, tau0 its first guess (e.g. the
-    onset). The same function serves the withstand shot and the breakdown shots:
-    the caller chooses amplitude and window. `loss` is passed to least_squares
-    ("linear" = ordinary least squares, "soft_l1", "huber", ...).
+    The reference (t_ref, u_ref) stays fixed; u_ref is positive (no polarity) and its
+    maximum is the theoretical peak. The measurement polarity * u, on the axis
+    t_sync = t - tau, is matched to the reference: polarity * u(t) ≈ u_ref(t - tau),
+    with u_ref linearly interpolated. tau is the only unknown.
+
+    Window: the measured front, from the first sample >= lo * peak up to the first
+    sample >= hi * peak, or up to the measured maximum if the wave never reaches
+    hi * peak (breakdown on the front, pre-discharges). Same function for Phase A
+    (withstand -> theoretical double exponential) and Phase B (breakdown -> adapted
+    withstand). `loss` is passed to least_squares ("linear", "soft_l1", "huber", ...).
 
     tau_se comes from the Jacobian and assumes white noise, so it underestimates
     the real error when the residual is systematic.
@@ -39,15 +41,26 @@ def match(
     if pu.max() < -pu.min():
         raise ValueError("The wave is mostly of the other polarity: wrong polarity or wrong shot?")
 
-    w = (t >= t_from) & (t <= t_to)
-    t_w, u_w = t[w], pu[w]
+    peak = u_ref.max()
+    front = pu[: np.argmax(pu) + 1]  # samples up to the measured maximum
+    if front[-1] < lo * peak:
+        raise ValueError(f"The measurement never reaches {lo:.0%} of the reference peak")
+    intex_lo = np.argmax(front >= lo * peak)  # argmax of a bool array = first True
+    above_hi = front >= hi * peak
+    intex_hi = np.argmax(above_hi) if above_hi.any() else len(front) - 1
+    t_w, u_w = t[intex_lo : intex_hi + 1], front[intex_lo : intex_hi + 1]
+    if len(t_w) < 2:
+        raise ValueError("Fewer than 2 samples in the front window")
+
+    slope_ref = np.gradient(u_ref, t_ref)
+    tau0 = t[intex_lo] - t_ref[np.argmax(u_ref >= lo * peak)]  # align the lo crossings
 
     def residual(p: np.ndarray) -> np.ndarray:
-        return u_w - amplitude * double_exp_pu(t_w - p[0], m)
+        return u_w - np.interp(t_w - p[0], t_ref, u_ref)
 
     def jacobian(p: np.ndarray) -> np.ndarray:
-        # d/dtau of -amplitude * pu(t - tau) = +amplitude * slope(t - tau)
-        return (amplitude * double_exp_slope(t_w - p[0], m))[:, None]
+        # d/dtau of -u_ref(t - tau) = +u_ref'(t - tau)
+        return np.interp(t_w - p[0], t_ref, slope_ref)[:, None]
 
     res = least_squares(residual, [tau0], jac=jacobian, loss=loss, f_scale=ROBUST_SCALE_KV)
     r = res.fun
