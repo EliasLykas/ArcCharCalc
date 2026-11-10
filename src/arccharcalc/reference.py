@@ -8,6 +8,19 @@ from scipy.optimize import least_squares
 # shortcut: fixed value, tune per campaign once robust losses are compared.
 ROBUST_SCALE_KV = 1.0
 
+# Relative tolerance of the measured peak below the expected one (Phase B): the
+# 15.5 / 16.25 kV shots are 0.2-1.1 % above the nominal ratio (README).
+AMPLITUDE_TOL = 0.02
+
+
+def breakdown_amplitude(up_measured: float, up_expected: float) -> float:
+    """Return the reference amplitude (kV) for a breakdown shot.
+
+    The measured peak, unless it falls more than AMPLITUDE_TOL below the expected
+    one (breakdown on the front, e.g. 30 kV); then the expected peak.
+    """
+    return up_measured if up_measured >= up_expected * (1 - AMPLITUDE_TOL) else up_expected
+
 
 def match(
     t: np.ndarray,

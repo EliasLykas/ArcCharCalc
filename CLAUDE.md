@@ -48,7 +48,8 @@ and update its "Κατάσταση" section when a step is done.
   shared by Phase A and B). Window = measured front, 30% → 90% of the reference peak (or the measured max).
 - The name `reference.py` is kept for the future time-fitting (matching) module.
 - τ is not the `t_start` of the charge.
-- Work only on Phase A (reference from the withstand shot) until told otherwise; Phase B comes later.
+- Phase A done. Phase B (2026-11-10, in progress): reference = measured withstand on its t_sync axis (t_w − τ_A),
+  scaled by `breakdown_amplitude` (measured peak, or Up_w·level/level_w if the shot is > 2 % below it).
 
 ## Verification
 - Every number we compute must be checked against Petros's Excel values
