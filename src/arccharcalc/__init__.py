@@ -1,6 +1,5 @@
 import sys
 from pathlib import Path
-import matplotlib.pyplot as plt
 
 from arccharcalc.generator import double_exp_pu
 from arccharcalc.io_lecroy import read_shot
@@ -27,7 +26,7 @@ def main() -> None:
 
     if len(sys.argv) < 4:
         raise ValueError("No breakdown shot given: usage: arccharcalc <level folder> <level> <shot> [polarity [<withstand folder> <withstand level> <withstand shot>]]")
-    if len(sys.argv) < 6:
+    if len(sys.argv) < 8:  # argv[5..7]: withstand folder, level, shot
         raise ValueError("No reference shot given: usage: arccharcalc <level folder> <level> <shot> [polarity [<withstand folder> <withstand level> <withstand shot>]]")
     
     polarity = int(sys.argv[4]) if len(sys.argv) > 4 else 1
@@ -52,7 +51,7 @@ def main() -> None:
     level_dir, level, shot = Path(sys.argv[1]), sys.argv[2], int(sys.argv[3])
     t, channels = read_shot(level_dir, level, shot)
 
-    print("Samples:          ", len(t))
+    print("\nSamples:          ", len(t))
     print("First time (us):  ", t[0])
     print("Last time (us):   ", t[-1])
     print("Time step (us):   ", t[1] - t[0])
@@ -60,7 +59,7 @@ def main() -> None:
 
     mean, std, halves = baseline_stats(t, channels["C3"], offset_window_end(t, channels["C3"]))
     u = voltage_kv(t, channels["C3"], offset_window_end(t, channels["C3"]))
-    print(f"Offset window end (us): {offset_window_end(t, channels["C3"]):.3f}")
+    print(f"\nOffset window end (us): {offset_window_end(t, channels["C3"]):.3f}")
     print(f"C3 baseline: mean {mean:.4f} V, std {std:.4f} V, half difference {halves:+.4f} V")
     print(f"Up (kV): {u.max():.3f}")
 
@@ -71,10 +70,11 @@ def main() -> None:
     #rule = "measured peak" if amplitude == up else "expected peak (breakdown on the front)"
     u_ref = amplitude * u_w / up_w  # scale the withstand reference to the measured peak
     tau_b, _, _ = match(t, u, t_w_sync, u_ref, polarity)
+    print (f"\nBreakdown shot: {level}kV/{shot}, Up (kV): {up:.3f}, tau_B (us): {tau_b:+.4f}, in reference to a Withstand shot {w_level}kV/{w_shot}")
     t_sync = t - tau_b  # align the measurement on the withstand t_sync axis
-    plot_waveform(t_sync, polarity * u, t_w_sync, u_ref, f"Breakdown shot {w_level}kV, shot: {w_shot}, Up (kV): {up:.3f}, tau_b (us): {tau_b:+.4f}, in reference to a Withstand shot", label_1="Breakdown", label_2="Withstand")
+    plot_waveform(t_sync, polarity * u, t_w_sync, u_ref, f"Breakdown shot {level}kV, shot: {shot}, Up (kV): {up:.3f}, tau_b (us): {tau_b:+.4f}, in reference to a Withstand shot {w_level}kV/{w_shot}", label_1="Breakdown", label_2="Withstand")
 
-"""     # Current channels use the same offset window as C3; charge starts at the onset.
+    """ # Current channels use the same offset window as C3; charge starts at the onset.
     onset = find_onset(t, channels["C3"])
     k = np.searchsorted(t, onset + CHARGE_AT_US)
     for name in ("C4", "C2"):
@@ -83,6 +83,7 @@ def main() -> None:
         q = charge_uc(t, i, onset)
         print(f"{name} baseline: mean {mean * 100:+.4f} A, std {std * 100:.4f} A, "
               f"half difference {halves * 100:+.4f} A")
-        print(f"{name} peak (A): {i.max():.2f}, charge {CHARGE_AT_US:g} us after onset (uC): {q[k]:.3f}")
- """
+        print(f"{name} peak (A): {i.max():.2f}, charge {CHARGE_AT_US:g} us after onset (uC): {q[k]:.3f}") """
+    
+
 
