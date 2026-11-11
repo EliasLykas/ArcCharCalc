@@ -6,11 +6,12 @@ from arccharcalc.generator import double_exp_pu
 from arccharcalc.io_lecroy import read_shot
 import numpy as np
 
-from arccharcalc.plotting import plot_waveform
+from arccharcalc.plotting import plot_current_voltage, plot_waveform
 from arccharcalc.processing import (
     baseline_stats,
     charge_uc,
     current_a,
+    current_joint,
     find_onset,
     offset_window_end,
     voltage_kv,
@@ -95,6 +96,8 @@ def main() -> None:
         print(f"{name} peak (A): {currents[name].max():.2f}, charge {CHARGE_AT_US:g} us after onset (uC): {q[k]:.3f}")
     plot_waveform(t_sync, currents["C4"], t_sync, currents["C2"], f"Currents, breakdown shot {level}kV/{shot}, on t_sync",
                   label_1="C4 (coarse)", label_2="C2 (fine)", ylabel="Current (A)")
-    
+    joint_current = current_joint(currents["C2"], currents["C4"])
+    plot_current_voltage(t_sync, joint_current, polarity * u, f"Breakdown shot {level}kV/{shot}, on t_sync",
+                         i_label="Joint current (C2 + C4)", u_label="Voltage")
 
 

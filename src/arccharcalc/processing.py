@@ -93,6 +93,21 @@ def charge_uc(t: np.ndarray, i: np.ndarray, t_start: float) -> np.ndarray:
     i = np.where(t >= t_start, i, 0.0)
     return np.concatenate([[0.0], np.cumsum((i[1:] + i[:-1]) / 2 * np.diff(t))])
 
+def current_joint(c2: np.ndarray, c4: np.ndarray) -> np.ndarray:
+    """Return the joint current (A) from C2 and C4, with the same offset window as C3.
+
+    The joint current is the sum of the two channels, after removing their offsets.
+    """
+    #intex = np.argmax(c2)  # index of the peak of C2, used to align the two channels
+
+    far = (np.abs(c2) == np.abs(c2).max()).astype(int)
+    runs = np.convolve(far, np.ones(ONSET_SAMPLES, dtype=int), mode="valid")
+    found = runs == ONSET_SAMPLES
+    if not found.any():
+            raise ValueError("No wave found in the record")
+    intex = np.argmax(found)  # index of the first sample of the first run 
+    joint = np.concatenate((c2[:intex], c4[intex:]))  # sum the two channels, with C4 starting at the peak of C2
+    return joint
 
 # --- Charge uncertainty: PROPOSAL, commented out until discussed with Petros ---
 # The baseline noise is not white (correlated over up to ~500 ns), so the standard
