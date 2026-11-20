@@ -1,6 +1,12 @@
 """Basic waveform quantities: baseline (offset) removal, voltage in kV, current in A, charge in uC."""
 
 import numpy as np
+from scipy.signal import savgol_filter
+
+# Savitzky-Golay filter for dU/dt (decision 2026-11-19, plan/REPORT_derivative-filter.md):
+# window 0.3 us, order 3 (tuned on the 11 kV withstand: peak slope within 2 % of the analytic one).
+SG_WINDOW_US = 0.3
+SG_ORDER = 3
 
 # Voltage divider ratio: C3 (low-voltage side) -> insulator (Excel, cell Z4).
 DIVIDER_RATIO = 1559.93
@@ -93,6 +99,31 @@ def charge_uc(t: np.ndarray, i: np.ndarray, t_start: float) -> np.ndarray:
     i = np.where(t >= t_start, i, 0.0)
     return np.concatenate([[0.0], np.cumsum((i[1:] + i[:-1]) / 2 * np.diff(t))])
 
+def energy_mj(t: np.ndarray, u: np.ndarray, i: np.ndarray, t_start: float) -> np.ndarray:
+    """Return the energy (mJ) E = ∫ u·i dt delivered since t_start (μs).
+
+    Same scheme as charge_uc: cumulative trapezoid rule, zero before t_start. With u in kV,
+    i in A and t in μs the result is directly in mJ (kV·A·μs = mJ). Pass the discharge
+    current i_exc to get the discharge energy.
+    """
+    p = np.where(t >= t_start, u * i, 0.0)  # instantaneous power (kW)
+    return np.concatenate([[0.0], np.cumsum((p[1:] + p[:-1]) / 2 * np.diff(t))])
+
+
+def capacitive_current_a(t: np.ndarray, u: np.ndarray, c_g: float) -> np.ndarray:
+    """Return the capacitive current I_c = C_g * dU/dt (A) of the reference u (kV).
+
+    c_g in nF (nF * kV/μs = A). The derivative is a Savitzky-Golay filter (window
+    SG_WINDOW_US, order SG_ORDER): smooths and differentiates in one step, with no
+    time shift. t must be uniformly spaced (μs), as in the oscilloscope records.
+    """
+    dt = t[1] - t[0]
+    n = int(round(SG_WINDOW_US / dt))
+    n += 1 - n % 2  # the window length must be odd
+    return c_g * savgol_filter(u, n, SG_ORDER, deriv=1, delta=dt)
+
+
+# Not used: kept to discuss with Petros (decision 2026-11-13, C2 compresses before its ceiling).
 def current_joint(c2: np.ndarray, c4: np.ndarray) -> np.ndarray:
     """Return the joint current (A) from C2 and C4, with the same offset window as C3.
 

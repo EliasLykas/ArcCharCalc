@@ -35,6 +35,53 @@ def plot_waveform(
     return fig, ax
 
 
+def plot_events(
+    t: np.ndarray,
+    u: np.ndarray,
+    i: np.ndarray,
+    q: np.ndarray,
+    e: np.ndarray,
+    events: dict[str, float],
+    title: str,
+    window: tuple[float, float],
+) -> tuple[Figure, tuple[Axes, Axes]]:
+    """Plot U and I (top), Q and E (bottom) around the events, like Figs 3.4-3.5 of Angeli-Knai (2022).
+
+    All waveforms share t (μs, e.g. t_sync). events maps a name (e.g. "fj") to its time (μs):
+    each gets a dashed vertical line and a dot on every curve. Only `window` (μs) is shown and
+    each y axis is scaled to the data inside it. Shown here, like plot_waveform.
+    """
+    lo, hi = window
+    inside = (t >= lo) & (t <= hi)
+    fig, (ax_u, ax_q) = plt.subplots(2, 1, sharex=True, figsize=(10, 8))
+    curves = [
+        (ax_u, u, "C0", "U (kV)"),
+        (ax_u.twinx(), i, "C3", "I_exc (A)"),  # twinx: second y axis on the right
+        (ax_q, q, "C0", "Q_exc (μC)"),
+        (ax_q.twinx(), e, "C3", "E_exc (mJ)"),
+    ]
+    for ax, x, color, label in curves:
+        ax.plot(t, x, color=color)
+        ax.set_ylabel(label, color=color)
+        ax.tick_params(axis="y", colors=color)
+        pad = 0.05 * (x[inside].max() - x[inside].min())
+        ax.set_ylim(x[inside].min() - pad, x[inside].max() + pad)
+        for te in events.values():
+            ax.plot(te, np.interp(te, t, x), "o", color=color)
+    for ax in (ax_u, ax_q):
+        for name, te in events.items():
+            ax.axvline(te, linestyle="--", color="gray")
+            ax.annotate(name, (te, 1.0), xycoords=("data", "axes fraction"), ha="center", va="bottom")
+        ax.grid(True)
+    ax_u.set_xlim(lo, hi)
+    ax_u.set_title(title, pad=18)
+    ax_q.set_xlabel("Time (μs)")
+    # shortcut: show() here only while testing; move it to the caller before batch runs (Phase 5).
+    plt.show()
+
+    return fig, (ax_u, ax_q)
+
+
 def plot_current_voltage(
     t: np.ndarray,
     i: np.ndarray,
