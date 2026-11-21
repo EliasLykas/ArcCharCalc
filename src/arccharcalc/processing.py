@@ -123,7 +123,7 @@ def capacitive_current_a(t: np.ndarray, u: np.ndarray, c_g: float) -> np.ndarray
     return c_g * savgol_filter(u, n, SG_ORDER, deriv=1, delta=dt)
 
 
-# Not used: kept to discuss with Petros (decision 2026-11-13, C2 compresses before its ceiling).
+# Not used: kept to be discussed (decision 2026-11-13, C2 compresses before its ceiling).
 def current_joint(c2: np.ndarray, c4: np.ndarray) -> np.ndarray:
     """Return the joint current (A) from C2 and C4, with the same offset window as C3.
 
