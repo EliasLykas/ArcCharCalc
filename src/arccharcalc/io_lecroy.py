@@ -1,8 +1,24 @@
 """Reading LeCroy WaveRunner oscilloscope CSV files."""
 
+from datetime import datetime
 from pathlib import Path
 
 import numpy as np
+
+
+def read_lecroy_header(path: Path) -> tuple[int, str]:
+    """Read the segment size and the trigger time from the 4 header lines of a LeCroy CSV.
+
+    Line 2 is like `Segments,1,SegmentSize,50001`, line 4 like `#1,15-Apr-2024 20:41:44,0`.
+
+    Returns (n_samples, trig_time): the number of samples and the trigger time as
+    ISO text "YYYY-MM-DD HH:MM:SS" (sorts correctly as text).
+    """
+    with open(path, encoding="ascii") as f:
+        lines = [f.readline() for _ in range(4)]
+    n_samples = int(lines[1].split(",")[3])
+    trig = datetime.strptime(lines[3].split(",")[1], "%d-%b-%Y %H:%M:%S")
+    return n_samples, trig.isoformat(sep=" ")
 
 
 def read_lecroy_csv(path: Path) -> tuple[np.ndarray, np.ndarray]:
