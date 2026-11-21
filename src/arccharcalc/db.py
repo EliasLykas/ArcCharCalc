@@ -1,13 +1,16 @@
-"""SQLite database with a copy of the oscilloscope shots (and later the results), see plan/ADR-001_database.md."""
+"""SQLite database with a copy of the oscilloscope shots and the results of every run, see plan/ADR-001_database.md."""
 
 import hashlib
 import re
 import sqlite3
+import subprocess
+from datetime import datetime
 from pathlib import Path
 
 import numpy as np
 
 from arccharcalc.io_lecroy import read_lecroy_header, read_shot
+from arccharcalc.pipeline import Breakdown, Withstand
 
 # Waveforms are stored as raw bytes of little-endian float64, exactly the numbers read_shot gives.
 # shortcut: float64 ~0.4 MB per channel and shot; if the file grows past ~10 GB, use float32/zlib or HDF5.
@@ -33,6 +36,41 @@ CREATE TABLE IF NOT EXISTS shot (
     c2 BLOB NOT NULL, c3 BLOB NOT NULL, c4 BLOB NOT NULL,  -- V, as recorded (no offset, no scaling)
     UNIQUE (campaign_id, level, number)
 );
+CREATE TABLE IF NOT EXISTS run (
+    id                INTEGER PRIMARY KEY,
+    started           TEXT NOT NULL,      -- local time "YYYY-MM-DD HH:MM:SS"
+    git_commit        TEXT NOT NULL,      -- code version; "-dirty" = uncommitted changes, "unknown" = no git
+    campaign_id       INTEGER NOT NULL REFERENCES campaign(id),
+    withstand_shot_id INTEGER NOT NULL REFERENCES shot(id)
+);
+CREATE TABLE IF NOT EXISTS shot_result (  -- one row per run and shot (withstand and breakdown)
+    run_id       INTEGER NOT NULL REFERENCES run(id),
+    shot_id      INTEGER NOT NULL REFERENCES shot(id),
+    up_kv        REAL NOT NULL,
+    t1_us        REAL,                    -- NULL if the front does not reach 90 %
+    tau_us       REAL NOT NULL,           -- tau_A (withstand) or tau_B (breakdown)
+    amplitude_kv REAL,                    -- breakdown only: peak of the scaled reference
+    cg_c2_nf     REAL, cg_c4_nf REAL,     -- withstand only: C_g from the Q-V fit
+    PRIMARY KEY (run_id, shot_id)
+);
+CREATE TABLE IF NOT EXISTS event (        -- fj, Ip1, ... of a breakdown shot
+    run_id   INTEGER NOT NULL REFERENCES run(id),
+    shot_id  INTEGER NOT NULL REFERENCES shot(id),
+    name     TEXT NOT NULL,
+    t_us     REAL NOT NULL,               -- on t_sync
+    u_kv     REAL NOT NULL,
+    i_exc_a  REAL NOT NULL,
+    q_exc_uc REAL NOT NULL,
+    e_exc_mj REAL NOT NULL,
+    PRIMARY KEY (run_id, shot_id, name)
+);
+CREATE TABLE IF NOT EXISTS waveform (     -- computed waveforms, kept per run during development
+    run_id  INTEGER NOT NULL REFERENCES run(id),
+    shot_id INTEGER NOT NULL REFERENCES shot(id),
+    name    TEXT NOT NULL,                -- e.g. t_sync, u, i_exc (units: see Withstand / Breakdown in pipeline.py)
+    data    BLOB NOT NULL,
+    PRIMARY KEY (run_id, shot_id, name)
+);
 """
 
 CHANNELS = ("C2", "C3", "C4")
@@ -57,6 +95,73 @@ def _sha256(paths: list[Path]) -> str:
     for p in paths:
         h.update(p.read_bytes())
     return h.hexdigest()
+
+
+def _shot_id(con: sqlite3.Connection, campaign: str, level: str, number: int) -> int:
+    """Database id of one shot. ValueError if it is not in the database."""
+    row = con.execute(
+        "SELECT s.id FROM shot s JOIN campaign c ON c.id = s.campaign_id WHERE c.name = ? AND s.level = ? AND s.number = ?",
+        (campaign, level, number),
+    ).fetchone()
+    if row is None:
+        raise ValueError(f"Shot {level}/{number:05d} of campaign {campaign} is not in the database")
+    return row[0]
+
+
+def _git_commit() -> str:
+    """Commit of the code that runs now, with "-dirty" if there are uncommitted changes ("unknown" without git)."""
+    code_dir = Path(__file__).parent
+    try:
+        commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=code_dir,
+                                capture_output=True, text=True, check=True).stdout.strip()
+        status = subprocess.run(["git", "status", "--porcelain"], cwd=code_dir,
+                                capture_output=True, text=True, check=True).stdout.strip()
+    except (OSError, subprocess.CalledProcessError):  # git not installed, or not a git repository
+        return "unknown"
+    return commit + ("-dirty" if status else "")
+
+
+def start_run(con: sqlite3.Connection, campaign: str, w_level: str, w_shot: int) -> int:
+    """Insert a new run (time, code version, withstand shot) and return its id."""
+    w_id = _shot_id(con, campaign, w_level, w_shot)
+    started = datetime.now().isoformat(sep=" ", timespec="seconds")
+    return con.execute(
+        "INSERT INTO run (started, git_commit, campaign_id, withstand_shot_id)"
+        " SELECT ?, ?, campaign_id, id FROM shot WHERE id = ?",
+        (started, _git_commit(), w_id),
+    ).lastrowid
+
+
+def _save_waveforms(con: sqlite3.Connection, run_id: int, shot_id: int, waveforms: dict[str, np.ndarray]) -> None:
+    """Store computed waveforms of one shot in one run."""
+    con.executemany(
+        "INSERT INTO waveform (run_id, shot_id, name, data) VALUES (?, ?, ?, ?)",
+        [(run_id, shot_id, name, _blob(x)) for name, x in waveforms.items()],
+    )
+
+
+def save_withstand(con: sqlite3.Connection, run_id: int, campaign: str, w: Withstand) -> None:
+    """Store the Phase A results of the withstand shot: Up, T1, tau_A, C_g and the waveforms t_sync, u."""
+    shot_id = _shot_id(con, campaign, w.level, w.shot)
+    con.execute(
+        "INSERT INTO shot_result (run_id, shot_id, up_kv, t1_us, tau_us, cg_c2_nf, cg_c4_nf) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (run_id, shot_id, w.up, w.t1, w.tau, w.c_g["C2"], w.c_g["C4"]),
+    )
+    _save_waveforms(con, run_id, shot_id, {"t_sync": w.t_sync, "u": w.u})
+
+
+def save_breakdown(con: sqlite3.Connection, run_id: int, campaign: str, b: Breakdown) -> None:
+    """Store the results of one breakdown shot: Up, T1, tau_B, amplitude, the events and all waveforms."""
+    shot_id = _shot_id(con, campaign, b.level, b.shot)
+    con.execute(
+        "INSERT INTO shot_result (run_id, shot_id, up_kv, t1_us, tau_us, amplitude_kv) VALUES (?, ?, ?, ?, ?, ?)",
+        (run_id, shot_id, b.up, b.t1, b.tau, b.amplitude),
+    )
+    con.executemany(
+        "INSERT INTO event (run_id, shot_id, name, t_us, u_kv, i_exc_a, q_exc_uc, e_exc_mj) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        [(run_id, shot_id, name, ev["t"], ev["u"], ev["i_exc"], ev["q_exc"], ev["e_exc"]) for name, ev in b.events.items()],
+    )
+    _save_waveforms(con, run_id, shot_id, b.waveforms)
 
 
 def campaign_polarity(con: sqlite3.Connection, campaign: str) -> int:

@@ -50,12 +50,12 @@ def match(
     """
     if polarity not in (1, -1):
         raise ValueError("polarity must be +1 or -1")
-    pu = polarity * u
-    if pu.max() < -pu.min():
+    pol_u = polarity * u
+    if pol_u.max() < -pol_u.min():
         raise ValueError("The wave is mostly of the other polarity: wrong polarity or wrong shot?")
 
     peak = u_ref.max()
-    front = pu[: np.argmax(pu) + 1]  # samples up to the measured maximum
+    front = pol_u[: np.argmax(pol_u) + 1]  # samples up to the measured maximum
     if front[-1] < lo * peak:
         raise ValueError(f"The measurement never reaches {lo:.0%} of the reference peak")
     intex_lo = np.argmax(front >= lo * peak)  # argmax of a bool array = first True

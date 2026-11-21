@@ -29,18 +29,18 @@ ONSET_SAMPLES = 20
 ONSET_MARGIN_US = 0.2
 
 
-def find_onset(t: np.ndarray, x: np.ndarray) -> float:
-    """Return the time (μs) where the wave starts in x.
+def find_onset(t: np.ndarray, v: np.ndarray) -> float:
+    """Return the time (μs) where the wave starts in v.
 
     Use the voltage channel (C3): the front is clearest there.
     """
     n = np.searchsorted(t, t[0] + BASELINE_US) # returns the index of the first sample after the baseline window
-    ref = x[:n] # first n samples for baseline reference
+    ref = v[:n] # first n samples for baseline reference
     median = np.median(ref)
     sigma = 1.4826 * np.median(np.abs(ref - median))  # MAD -> std of normal noise
     if sigma == 0:
         raise ValueError("Flat baseline: cannot estimate the noise level")
-    far = (np.abs(x - median) > ONSET_SIGMAS * sigma).astype(int)
+    far = (np.abs(v - median) > ONSET_SIGMAS * sigma).astype(int)
     runs = np.convolve(far, np.ones(ONSET_SAMPLES, dtype=int), mode="valid") #it makes an array of the sum of ONSET_SAMPLES consecutive elements of far
     found = runs == ONSET_SAMPLES # True where all ONSET_SAMPLES samples of the run are further than ONSET_SIGMAS*sigma from the median
     if not found.any():
@@ -56,21 +56,21 @@ def offset_window_end(t: np.ndarray, c3: np.ndarray) -> float:
     return find_onset(t, c3) - ONSET_MARGIN_US # the window ends ONSET_MARGIN_US before the onset
 
 
-def remove_offset(t: np.ndarray, x: np.ndarray, t_window: float) -> np.ndarray:
-    """Subtract the mean of x over the samples before t_window (μs)."""
+def remove_offset(t: np.ndarray, v: np.ndarray, t_window: float) -> np.ndarray:
+    """Subtract the mean of v over the samples before t_window (μs)."""
     
-    return x - x[t < t_window].mean()
+    return v - v[t < t_window].mean()
 
 
 def baseline_stats(
-    t: np.ndarray, x: np.ndarray, t_window : float
+    t: np.ndarray, v: np.ndarray, t_window : float
 ) -> tuple[float, float, float]:
-    """Return (mean, std, half difference) of x over the samples before t_end.
+    """Return (mean, std, half difference) of v over the samples before t_end.
 
     The half difference is mean(second half) - mean(first half) of the window:
     close to zero when the baseline is quiet, large when it drifts.
     """
-    window = x[t < t_window]
+    window = v[t < t_window]
     half = len(window) // 2
     return window.mean(), window.std(), window[half:].mean() - window[:half].mean()
 
@@ -123,24 +123,24 @@ def capacitive_current_a(t: np.ndarray, u: np.ndarray, c_g: float) -> np.ndarray
     return c_g * savgol_filter(u, n, SG_ORDER, deriv=1, delta=dt)
 
 
-# Not used: kept to be discussed (decision 2026-11-13, C2 compresses before its ceiling).
-def current_joint(c2: np.ndarray, c4: np.ndarray) -> np.ndarray:
-    """Return the joint current (A) from C2 and C4, with the same offset window as C3.
+# --- Not used: kept to be discussed (decision 2026-11-13, C2 compresses before its ceiling). ---
+#def current_joint(c2: np.ndarray, c4: np.ndarray) -> np.ndarray:
+#    """Return the joint current (A) from C2 and C4, with the same offset window as C3.
+#
+#    The joint current is the sum of the two channels, after removing their offsets.
+#    """
+#    #intex = np.argmax(c2)  # index of the peak of C2, used to align the two channels
+#
+#    far = (np.abs(c2) == np.abs(c2).max()).astype(int)
+#    runs = np.convolve(far, np.ones(ONSET_SAMPLES, dtype=int), mode="valid")
+#    found = runs == ONSET_SAMPLES
+#    if not found.any():
+#            raise ValueError("No wave found in the record")
+#    intex = np.argmax(found)  # index of the first sample of the first run 
+#    joint = np.concatenate((c2[:intex], c4[intex:]))  # sum the two channels, with C4 starting at the peak of C2
+#    return joint
 
-    The joint current is the sum of the two channels, after removing their offsets.
-    """
-    #intex = np.argmax(c2)  # index of the peak of C2, used to align the two channels
-
-    far = (np.abs(c2) == np.abs(c2).max()).astype(int)
-    runs = np.convolve(far, np.ones(ONSET_SAMPLES, dtype=int), mode="valid")
-    found = runs == ONSET_SAMPLES
-    if not found.any():
-            raise ValueError("No wave found in the record")
-    intex = np.argmax(found)  # index of the first sample of the first run 
-    joint = np.concatenate((c2[:intex], c4[intex:]))  # sum the two channels, with C4 starting at the peak of C2
-    return joint
-
-# --- Charge uncertainty: PROPOSAL, commented out until discussed with Petros ---
+# --- Charge uncertainty: PROPOSAL, commented out until discussed ---
 # The baseline noise is not white (correlated over up to ~500 ns), so the standard
 # error of the offset is NOT sigma / sqrt(N). Instead, split the offset window into
 # blocks, take the mean of each block, and use the scatter of those means.

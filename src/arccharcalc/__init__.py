@@ -1,7 +1,15 @@
 import sys
 from pathlib import Path
 
-from arccharcalc.db import campaign_polarity, connect, import_campaign, load_shot
+from arccharcalc.db import (
+    campaign_polarity,
+    connect,
+    import_campaign,
+    load_shot,
+    save_breakdown,
+    save_withstand,
+    start_run,
+)
 from arccharcalc.pipeline import process_breakdown, process_withstand
 
 USAGE = ("usage: arccharcalc <database file> <campaign> <level> <shot> <withstand level> <withstand shot>\n"
@@ -31,6 +39,11 @@ def main() -> None:
 
     con = connect(Path(db_file))
     polarity = campaign_polarity(con, campaign)
-    withstand = process_withstand(*load_shot(con, campaign, w_level, int(w_shot)), w_level, int(w_shot), polarity)
-    process_breakdown(*load_shot(con, campaign, level, int(shot)), level, int(shot), polarity, withstand)
+    with con:  # one transaction: the whole run is stored, or nothing if anything fails
+        run_id = start_run(con, campaign, w_level, int(w_shot))
+        withstand = process_withstand(*load_shot(con, campaign, w_level, int(w_shot)), w_level, int(w_shot), polarity)
+        save_withstand(con, run_id, campaign, withstand)
+        breakdown = process_breakdown(*load_shot(con, campaign, level, int(shot)), level, int(shot), polarity, withstand)
+        save_breakdown(con, run_id, campaign, breakdown)
     con.close()
+    print(f"\nStored as run {run_id} in {db_file}")
