@@ -14,3 +14,6 @@ desktop.ini
 
 # Plan and reports: local working notes, not versioned
 plan/
+
+# Scratch files: local working notes, not versioned
+scratch/

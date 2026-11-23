@@ -164,6 +164,49 @@ def save_breakdown(con: sqlite3.Connection, run_id: int, campaign: str, b: Break
     _save_waveforms(con, run_id, shot_id, b.waveforms)
 
 
+def _load_waveforms(con: sqlite3.Connection, run_id: int, shot_id: int) -> dict[str, np.ndarray]:
+    """Computed waveforms of one shot in one run, as {name: array} (read-only views of the stored bytes)."""
+    rows = con.execute("SELECT name, data FROM waveform WHERE run_id = ? AND shot_id = ?", (run_id, shot_id))
+    return {name: np.frombuffer(data, dtype=BLOB_DTYPE) for name, data in rows}
+
+
+def load_withstand(con: sqlite3.Connection, run_id: int) -> Withstand:
+    """Read back the withstand result of one run, as `process_withstand` returned it. ValueError if the run is missing."""
+    row = con.execute(
+        "SELECT s.id, s.level, s.number, r.up_kv, r.t1_us, r.tau_us, r.cg_c2_nf, r.cg_c4_nf"
+        " FROM run JOIN shot_result r ON r.run_id = run.id AND r.shot_id = run.withstand_shot_id"
+        " JOIN shot s ON s.id = r.shot_id WHERE run.id = ?",
+        (run_id,),
+    ).fetchone()
+    if row is None:
+        raise ValueError(f"Run {run_id} is not in the database")
+    shot_id, level, number, up, t1, tau, cg_c2, cg_c4 = row
+    wf = _load_waveforms(con, run_id, shot_id)
+    return Withstand(level, number, wf["t_sync"], wf["u"], up, {"C2": cg_c2, "C4": cg_c4}, tau, t1)
+
+
+def load_breakdowns(con: sqlite3.Connection, run_id: int) -> list[Breakdown]:
+    """Read back the breakdown results of one run, as `process_breakdown` returned them (ordered by level, shot)."""
+    rows = con.execute(
+        "SELECT s.id, s.level, s.number, r.up_kv, r.amplitude_kv, r.tau_us, r.t1_us"
+        " FROM run JOIN shot_result r ON r.run_id = run.id AND r.shot_id != run.withstand_shot_id"
+        " JOIN shot s ON s.id = r.shot_id WHERE run.id = ? ORDER BY CAST(s.level AS REAL), s.number",
+        (run_id,),
+    ).fetchall()
+    breakdowns = []
+    for shot_id, level, number, up, amplitude, tau, t1 in rows:
+        events = {
+            name: {"t": t, "u": u, "i_exc": i, "q_exc": q, "e_exc": e}
+            for name, t, u, i, q, e in con.execute(
+                "SELECT name, t_us, u_kv, i_exc_a, q_exc_uc, e_exc_mj FROM event"
+                " WHERE run_id = ? AND shot_id = ? ORDER BY t_us",
+                (run_id, shot_id),
+            )
+        }
+        breakdowns.append(Breakdown(level, number, up, amplitude, tau, t1, events, _load_waveforms(con, run_id, shot_id)))
+    return breakdowns
+
+
 def campaign_polarity(con: sqlite3.Connection, campaign: str) -> int:
     """Polarity (+1/-1) stored for a campaign at import. ValueError if the campaign is not in the database."""
     row = con.execute("SELECT polarity FROM campaign WHERE name = ?", (campaign,)).fetchone()

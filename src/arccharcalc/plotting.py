@@ -19,7 +19,7 @@ def plot_waveform(
     Each waveform has its own time axis (µs), because the two are generally
     on different axes (e.g. withstand on t_w - tau_A, breakdown on t).
     Amplitudes are plotted as given, in the unit named by ylabel (default kV). The input arrays are not modified.
-    For now the figure is shown here and the call blocks until the window is closed.
+    The figure is not shown here: the caller calls plt.show() (see `report.plot_run`).
     """
     fig, ax = plt.subplots(figsize=(10, 5))
     ax.plot(t_1, v_1 , color="C0", label=label_1)
@@ -29,9 +29,6 @@ def plot_waveform(
     ax.set_ylabel(ylabel)
     ax.grid(True)
     ax.legend()
-    # shortcut: show() here only while testing; move it to the caller before batch runs (Phase 5) that save figures.
-    plt.show()
-
     return fig, ax
 
 
@@ -49,7 +46,7 @@ def plot_events(
 
     All waveforms share t (μs, e.g. t_sync). events maps a name (e.g. "fj") to its time (μs):
     each gets a dashed vertical line and a dot on every curve. Only `window` (μs) is shown and
-    each y axis is scaled to the data inside it. Shown here, like plot_waveform.
+    each y axis is scaled to the data inside it. Not shown here, like plot_waveform.
     """
     lo, hi = window
     inside = (t >= lo) & (t <= hi)
@@ -76,9 +73,6 @@ def plot_events(
     ax_u.set_xlim(lo, hi)
     ax_u.set_title(title, pad=18)
     ax_q.set_xlabel("Time (μs)")
-    # shortcut: show() here only while testing; move it to the caller before batch runs (Phase 5).
-    plt.show()
-
     return fig, (ax_u, ax_q)
 
 
@@ -93,7 +87,7 @@ def plot_current_voltage(
     """Plot current (left axis, A) and voltage (right axis, kV) on one time axis (µs).
 
     Both waveforms share t (e.g. t_sync); each y axis has its own scale.
-    Returns (fig, ax_i, ax_u). Shown here, like plot_waveform.
+    Returns (fig, ax_i, ax_u). Not shown here, like plot_waveform.
     """
     fig, ax_i = plt.subplots(figsize=(10, 5))
     ax_u = ax_i.twinx()  # second y axis on the right, same x axis
@@ -113,7 +107,4 @@ def plot_current_voltage(
     ax_i.grid(True)
     lines = line_i + line_u  # one legend for the lines of both axes
     ax_i.legend(lines, [line.get_label() for line in lines])
-    # shortcut: show() here only while testing; move it to the caller before batch runs (Phase 5).
-    plt.show()
-
     return fig, ax_i, ax_u
