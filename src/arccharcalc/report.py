@@ -1,4 +1,6 @@
-"""Print and plot the results of one run, from what is stored in the database (see `db.load_withstand`, `db.load_breakdowns`)."""
+"""Print, plot and export the results of one run, from what is stored in the database (see `db.load_withstand`, `db.load_breakdowns`)."""
+
+from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -7,6 +9,15 @@ from arccharcalc.features import front_time
 from arccharcalc.generator import double_exp_pu
 from arccharcalc.pipeline import Breakdown, Withstand
 from arccharcalc.plotting import plot_current_voltage, plot_events, plot_waveform
+
+# Columns of the exported CSV, in this order, with their units. Given explicitly, because the order of
+# the waveforms read from the database is not guaranteed.
+CSV_COLUMNS = {
+    "t_sync": "us", "u": "kV",
+    "i_c4": "A", "i_c2": "A", "i_c": "A", "i_exc": "A",
+    "q_c4": "uC", "q_c2": "uC", "q_g": "uC", "q_exc": "uC",
+    "e_exc": "mJ",
+}
 
 
 def print_run(w: Withstand, breakdowns: list[Breakdown]) -> None:
@@ -67,3 +78,29 @@ def plot_run(w: Withstand, breakdowns: list[Breakdown]) -> None:
         plot_waveform(t_sync, wf["q_c4"], t_sync, wf["q_g"], f"Charge, {name}, on t_sync",
                       label_1="Q (C4)", label_2="Q_g = C_g * U_ref", ylabel="Charge (uC)")
     plt.show()
+
+
+def _write_csv(path: Path, waveforms: dict[str, np.ndarray], names: list[str]) -> None:
+    """Write the named waveforms as columns of one CSV, with a header row "name (unit)"."""
+    header = ",".join(f"{n} ({CSV_COLUMNS[n]})" for n in names)
+    np.savetxt(path, np.column_stack([waveforms[n] for n in names]), delimiter=",", fmt="%.10g",
+               header=header, comments="")  # comments="": no "# " before the header, so Excel reads it as a row
+
+
+def export_csv(w: Withstand, breakdowns: list[Breakdown], out_dir: Path, run_id: int) -> list[Path]:
+    """Write the computed waveforms of one run to CSV, one file per shot, and return the paths written.
+
+    Format as the raw LeCroy CSVs (`,` separator, `.` decimal), 10 significant digits. Withstand: t_sync, u;
+    breakdown: all CSV_COLUMNS. Files `run-<id>_<level>kV_<shot>[_withstand].csv` in out_dir (created if missing,
+    files of the same run are overwritten).
+    """
+    # shortcut: CSV only for checks in Excel; drop it or move the format to the .toml config if it stays.
+    out_dir.mkdir(parents=True, exist_ok=True)
+    path = out_dir / f"run-{run_id}_{w.level}kV_{w.shot:05d}_withstand.csv"
+    _write_csv(path, {"t_sync": w.t_sync, "u": w.u}, ["t_sync", "u"])
+    paths = [path]
+    for b in breakdowns:
+        path = out_dir / f"run-{run_id}_{b.level}kV_{b.shot:05d}.csv"
+        _write_csv(path, b.waveforms, list(CSV_COLUMNS))
+        paths.append(path)
+    return paths

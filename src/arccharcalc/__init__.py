@@ -14,11 +14,12 @@ from arccharcalc.db import (
     start_run,
 )
 from arccharcalc.pipeline import process_breakdown, process_withstand
-from arccharcalc.report import plot_run, print_run
+from arccharcalc.report import export_csv, plot_run, print_run
 
 USAGE = ("usage: arccharcalc <database file> <campaign> <level> <shot> <withstand level> <withstand shot>\n"
          "   or: arccharcalc import <database file> <campaign folder> <polarity>\n"
-         "   or: arccharcalc show <database file> <run id>")
+         "   or: arccharcalc show <database file> <run id>\n"
+         "   or: arccharcalc export <database file> <run id> <output folder>")
 
 
 def _open_existing(db_file: str) -> sqlite3.Connection:
@@ -43,6 +44,8 @@ def main() -> None:
     #   arccharcalc ../results/arccharcalc.sqlite 2024-04-15_56-1-2sheds_LI-1.2-50_pos 15.5 3 11 0
     # Print and plot a stored run again:
     #   arccharcalc show ../results/arccharcalc.sqlite 1
+    # Write the computed waveforms of a stored run to CSV, one file per shot (for checks in Excel):
+    #   arccharcalc export ../results/arccharcalc.sqlite 1 ../results/csv
 
     if len(sys.argv) > 1 and sys.argv[1] == "import":
         if len(sys.argv) < 5:
@@ -59,6 +62,17 @@ def main() -> None:
         con = _open_existing(sys.argv[2])
         _show_run(con, int(sys.argv[3]))
         con.close()
+        return
+
+    if len(sys.argv) > 1 and sys.argv[1] == "export":
+        if len(sys.argv) < 5:
+            raise ValueError(USAGE)
+        con = _open_existing(sys.argv[2])
+        run_id = int(sys.argv[3])
+        paths = export_csv(load_withstand(con, run_id), load_breakdowns(con, run_id), Path(sys.argv[4]), run_id)
+        con.close()
+        for p in paths:
+            print(f"Wrote {p}")
         return
 
     if len(sys.argv) < 7:
