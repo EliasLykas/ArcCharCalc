@@ -36,7 +36,7 @@ def print_run(w: Withstand, breakdowns: list[Breakdown]) -> None:
         print(f"C2 peak (A): {wf['i_c2'].max():.2f}")
 
         k0 = np.searchsorted(wf["t_sync"], 0.0)  # sample at t_sync = 0
-        print(f"\nC_g (C4) = {w.c_g['C4'] * 1000:.2f} pF")
+        print(f"\nC_g (C4) = {w.c_g * 1000:.2f} pF")
         print(f"t_sync = 0:  Q {wf['q_c4'][k0]:.3f}, Q_g {wf['q_g'][k0]:.3f}, Q_exc {wf['q_exc'][k0]:+.3f} uC")
         print(f"t_sync = 0:  I {wf['i_c4'][k0]:+.3f}, I_c {wf['i_c'][k0]:+.3f}, I_exc {wf['i_exc'][k0]:+.3f} A;  "
               f"peak I_c {wf['i_c'].max():.2f} A")
@@ -55,28 +55,28 @@ def plot_run(w: Withstand, breakdowns: list[Breakdown]) -> None:
     u_ref = amplitude * u_w / Up_w. All windows are shown together at the end (the call blocks until they are closed).
     """
     t_w = w.t_sync + w.tau
-    plot_waveform(w.t_sync, w.u, t_w, w.up * double_exp_pu(t_w),
+    """ plot_waveform(w.t_sync, w.u, t_w, w.up * double_exp_pu(t_w),
                   f"Withstand shot {w.level}kV, shot: {w.shot}, Up (kV): {w.up:.3f}, tau_A (us): {w.tau:+.4f}, "
                   "in reference to a perfect double exponential", label_1="Withstand", label_2="Double exponential")
-
+ """
     for b in breakdowns:
         wf, name = b.waveforms, f"breakdown shot {b.level}kV/{b.shot}"
         t_sync = wf["t_sync"]
         u_ref = b.amplitude * w.u / w.up  # the withstand reference scaled as in process_breakdown
-        plot_waveform(t_sync, wf["u"], w.t_sync, u_ref,
+        """ plot_waveform(t_sync, wf["u"], w.t_sync, u_ref,
                       f"Breakdown shot {b.level}kV, shot: {b.shot}, Up (kV): {b.up:.3f}, tau_b (us): {b.tau:+.4f}, "
                       f"in reference to a Withstand shot {w.level}kV/{w.shot}", label_1="Breakdown", label_2="Withstand")
         plot_waveform(t_sync, wf["i_c4"], t_sync, wf["i_c2"], f"Currents, {name}, on t_sync",
                       label_1="C4 (coarse)", label_2="C2 (fine)", ylabel="Current (A)")
         plot_current_voltage(t_sync, wf["i_c4"], wf["u"], f"Breakdown shot {b.level}kV/{b.shot}, on t_sync",
-                             i_label="Current C4", u_label="Voltage")
+                             i_label="Current C4", u_label="Voltage") """
         times = {ev_name: ev["t"] for ev_name, ev in b.events.items()}
         plot_events(t_sync, wf["u"], wf["i_exc"], wf["q_exc"], wf["e_exc"], times, f"Events, {name}, on t_sync",
                     window=(min(times.values()) - 0.5, max(times.values()) + 1.0))
-        plot_waveform(t_sync, wf["i_exc"], t_sync, wf["i_c"], f"Discharge current, {name}, on t_sync",
+        """ plot_waveform(t_sync, wf["i_exc"], t_sync, wf["i_c"], f"Discharge current, {name}, on t_sync",
                       label_1="I_exc = I - I_c", label_2="I_c = C_g * dU_ref/dt", ylabel="Current (A)")
         plot_waveform(t_sync, wf["q_c4"], t_sync, wf["q_g"], f"Charge, {name}, on t_sync",
-                      label_1="Q (C4)", label_2="Q_g = C_g * U_ref", ylabel="Charge (uC)")
+                      label_1="Q (C4)", label_2="Q_g = C_g * U_ref", ylabel="Charge (uC)") """
     plt.show()
 
 

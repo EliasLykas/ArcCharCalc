@@ -33,7 +33,7 @@ class Withstand:
     t_sync: np.ndarray  # μs, t_w - tau_A
     u: np.ndarray  # kV, positive (polarity applied)
     up: float  # kV, u.max()
-    c_g: dict[str, float]  # nF, per current channel ("C2", "C4")
+    c_g: float  # nF, from current channel "C4"
     tau: float  # μs, tau_A (shift onto the double exponential)
     t1: float  # μs, front time 1.67 * (t90 - t30)
 
@@ -71,15 +71,13 @@ def process_withstand(t_w: np.ndarray, ch_w: dict[str, np.ndarray], w_level: str
     onset_w = find_onset(t_w, ch_w["C3"])
     k90 = np.argmax(u_w >= 0.9 * up_w)  # first sample at 90 %
     front_w = (t_w >= onset_w) & (np.arange(len(t_w)) <= k90)  # boolean mask of the fit window
-    c_g = {}  # nF, per channel
-    for name in ("C2", "C4"):  # C2: fine scale, does not clip here (3.35 A); C4 for comparison
-        q_w = charge_uc(t_w, polarity * current_a(t_w, ch_w[name], t_end_w), onset_w)
-        cg, cg_se = cg_qv(u_w[front_w], q_w[front_w])
-        c_g[name] = cg
-        # Check (kept for verification, not run): standard error of C_g and a fit with free intercept.
-        # slope, intercept = np.polyfit(u_w[front_w], q_w[front_w], 1)
-        # print(f"C_g from {name} (pF): {cg * 1000:.2f} +/- {cg_se * 1000:.2f}, "
-        #       f"free intercept: {slope * 1000:.2f} pF, intercept {intercept:+.4f} uC")
+    # Only C4: C2 clips the current front, so its charge, and hence its C_g, would be wrong (user, 2026-11-24).
+    q_w = charge_uc(t_w, polarity * current_a(t_w, ch_w["C4"], t_end_w), onset_w)
+    c_g, cg_se = cg_qv(u_w[front_w], q_w[front_w])  # nF; [front_w] keeps only the samples of the fit window
+    # Check (kept for verification, not run): standard error of C_g and a fit with free intercept.
+    # slope, intercept = np.polyfit(u_w[front_w], q_w[front_w], 1)
+    # print(f"C_g from C4 (pF): {c_g * 1000:.2f} +/- {cg_se * 1000:.2f}, "
+    #       f"free intercept: {slope * 1000:.2f} pF, intercept {intercept:+.4f} uC")
 
     t_w_sync = t_w - tau_ref  # align the withstand on its own t_sync axis
     return Withstand(w_level, w_shot, t_w_sync, u_w, up_w, c_g, tau_ref, t1_w)
@@ -130,11 +128,11 @@ def process_breakdown(t: np.ndarray, channels: dict[str, np.ndarray], level: str
 
     # Phase 3, step 1: capacitive charge Q_g = C_g * U_ref and discharge charge Q_exc = Q - Q_g, on the same time.
     # C4 and its own C_g (same channel). u_ref is interpolated on the measured samples (t_sync), np.interp keeps its edge values outside.
-    q_g = w.c_g["C4"] * np.interp(t_sync, w.t_sync, u_ref)  # nF * kV = uC
+    q_g = w.c_g * np.interp(t_sync, w.t_sync, u_ref)  # nF * kV = uC
     q_exc = charges["C4"] - q_g
     # Phase 3, step 2: capacitive current I_c = C_g * dU_ref/dt (Savitzky-Golay on the reference), I_exc = I - I_c.
     # The derivative is taken on the reference's own grid, then interpolated like u_ref above.
-    i_c = np.interp(t_sync, w.t_sync, capacitive_current_a(w.t_sync, u_ref, w.c_g["C4"]))
+    i_c = np.interp(t_sync, w.t_sync, capacitive_current_a(w.t_sync, u_ref, w.c_g))
     i_exc = currents["C4"] - i_c
     # Phase 4, step 1: discharge energy E_exc = ∫ U * I_exc dt from the onset (U with polarity applied, so it is positive).
     e_exc = energy_mj(t, polarity * u, i_exc, onset)
@@ -143,9 +141,11 @@ def process_breakdown(t: np.ndarray, channels: dict[str, np.ndarray], level: str
     # print(f"onset + {CHARGE_AT_US:g} us:  Q {charges['C4'][k]:.3f}, Q_g {q_g[k]:.3f}, Q_exc {q_exc[k]:+.3f} uC")
     # print(f"E_exc onset + {CHARGE_AT_US:g} us: {e_exc[k]:.2f} mJ")
 
-    # Phase 4, step 2: events fj (final jump) and Ip1 (flashover), with U, I_exc, Q_exc, E_exc at each.
+    # Phase 4, step 2: events fj (final jump), Ip1 (flashover, first peak) and Ipmax (overall maximum of I_exc),
+    # with U, I_exc, Q_exc, E_exc at each. Ip1 and Ipmax coincide when there is no earlier peak.
     k_pk = first_peak(i_exc)
-    times = {"fj": t_final_jump(t_sync, i_exc, k_pk), "Ip1": float(t_sync[k_pk])}
+    times = {"fj": t_final_jump(t_sync, i_exc, k_pk), "Ip1": float(t_sync[k_pk]),
+             "Ipmax": float(t_sync[np.argmax(i_exc)])}
     events = {}
     for name, te in times.items():
         at = lambda x: float(np.interp(te, t_sync, x))  # value of a waveform at the event time

@@ -145,7 +145,7 @@ def save_withstand(con: sqlite3.Connection, run_id: int, campaign: str, w: Withs
     shot_id = _shot_id(con, campaign, w.level, w.shot)
     con.execute(
         "INSERT INTO shot_result (run_id, shot_id, up_kv, t1_us, tau_us, cg_c2_nf, cg_c4_nf) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        (run_id, shot_id, w.up, w.t1, w.tau, w.c_g["C2"], w.c_g["C4"]),
+        (run_id, shot_id, w.up, w.t1, w.tau, None, w.c_g),  # cg_c2_nf NULL: C_g only from C4 since 2026-11-24
     )
     _save_waveforms(con, run_id, shot_id, {"t_sync": w.t_sync, "u": w.u})
 
@@ -173,16 +173,16 @@ def _load_waveforms(con: sqlite3.Connection, run_id: int, shot_id: int) -> dict[
 def load_withstand(con: sqlite3.Connection, run_id: int) -> Withstand:
     """Read back the withstand result of one run, as `process_withstand` returned it. ValueError if the run is missing."""
     row = con.execute(
-        "SELECT s.id, s.level, s.number, r.up_kv, r.t1_us, r.tau_us, r.cg_c2_nf, r.cg_c4_nf"
+        "SELECT s.id, s.level, s.number, r.up_kv, r.t1_us, r.tau_us, r.cg_c4_nf"
         " FROM run JOIN shot_result r ON r.run_id = run.id AND r.shot_id = run.withstand_shot_id"
         " JOIN shot s ON s.id = r.shot_id WHERE run.id = ?",
         (run_id,),
     ).fetchone()
     if row is None:
         raise ValueError(f"Run {run_id} is not in the database")
-    shot_id, level, number, up, t1, tau, cg_c2, cg_c4 = row
+    shot_id, level, number, up, t1, tau, cg_c4 = row
     wf = _load_waveforms(con, run_id, shot_id)
-    return Withstand(level, number, wf["t_sync"], wf["u"], up, {"C2": cg_c2, "C4": cg_c4}, tau, t1)
+    return Withstand(level, number, wf["t_sync"], wf["u"], up, cg_c4, tau, t1)
 
 
 def load_breakdowns(con: sqlite3.Connection, run_id: int) -> list[Breakdown]:
