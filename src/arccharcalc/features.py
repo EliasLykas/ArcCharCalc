@@ -11,7 +11,7 @@ FRONT_FACTOR = 1.67
 # PEAK_PROMINENCE of max(i). 9 shots (2026-11-24): first peaks at 0.91-0.95 of max, prominence 0.04-0.12
 # (17-45 A); next highest peak 0.35. PEAK_PROMINENCE (7-14 A) is >= 7x the C4 noise (~1 A).
 PEAK_HEIGHT = 0.8
-PEAK_PROMINENCE = 0.02
+# PEAK_PROMINENCE = 0.02
 
 # Final jump fj (Angeli-Knai 2022, 3.1.2): maximum slope of the discharge current, from FJ_SEARCH_FROM_US
 # (t_sync, skips the front, where I_exc has an unexplained +-6 A artefact) up to the first peak.
@@ -45,16 +45,16 @@ def front_time(t: np.ndarray, u: np.ndarray, peak: float) -> float:
     return FRONT_FACTOR * (t90 - t30)
 
 
-def first_peak(i: np.ndarray) -> int:
+def first_peak(i: np.ndarray) -> np.ndarray:
     """Return the index of the first peak in time of i (A), the flashover current Ip1.
 
     A peak counts if its height is at least PEAK_HEIGHT and its prominence at least
     PEAK_PROMINENCE of max(i). Raises ValueError if there is none.
     """
-    peaks, _ = find_peaks(i, height=PEAK_HEIGHT * i.max(), prominence=PEAK_PROMINENCE * i.max())
+    peaks, _ = find_peaks(i, height=PEAK_HEIGHT * i.max())
     if len(peaks) == 0:
         raise ValueError("No current peak found")
-    return int(peaks[0])
+    return peaks
 
 
 def t_final_jump(t: np.ndarray, i: np.ndarray, k_peak: int) -> float:

@@ -144,8 +144,9 @@ def process_breakdown(t: np.ndarray, channels: dict[str, np.ndarray], level: str
     # Phase 4, step 2: events fj (final jump), Ip1 (flashover, first peak) and Ipmax (overall maximum of I_exc),
     # with U, I_exc, Q_exc, E_exc at each. Ip1 and Ipmax coincide when there is no earlier peak.
     k_pk = first_peak(i_exc)
-    times = {"fj": t_final_jump(t_sync, i_exc, k_pk), "Ip1": float(t_sync[k_pk]),
-             "Ipmax": float(t_sync[np.argmax(i_exc)])}
+    times = {"fj": t_final_jump(t_sync, i_exc, k_pk[0]), "Ip1": float(t_sync[k_pk[0]])}
+    if len(k_pk) > 1:
+        times["Ip2"] = float(t_sync[k_pk[1]])
     events = {}
     for name, te in times.items():
         at = lambda x: float(np.interp(te, t_sync, x))  # value of a waveform at the event time
