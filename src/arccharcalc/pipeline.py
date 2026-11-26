@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from arccharcalc.features import cg_qv, first_peak, front_time, t_final_jump
+from arccharcalc.features import LI_C2_CEILING, cg_qv, current_peaks, front_time, t_final_jump, t_steady_rise
 from arccharcalc.generator import double_exp_pu
 from arccharcalc.processing import (
     capacitive_current_a,
@@ -141,12 +141,18 @@ def process_breakdown(t: np.ndarray, channels: dict[str, np.ndarray], level: str
     # print(f"onset + {CHARGE_AT_US:g} us:  Q {charges['C4'][k]:.3f}, Q_g {q_g[k]:.3f}, Q_exc {q_exc[k]:+.3f} uC")
     # print(f"E_exc onset + {CHARGE_AT_US:g} us: {e_exc[k]:.2f} mJ")
 
-    # Phase 4, step 2: events fj (final jump), Ip1 (flashover, first peak) and Ipmax (overall maximum of I_exc),
-    # with U, I_exc, Q_exc, E_exc at each. Ip1 and Ipmax coincide when there is no earlier peak.
-    k_pk = first_peak(i_exc)
+    # Phase 4, step 2: events fj (final jump, before Ip1), Ip1 (first peak of I_exc) and Ip2 (second peak,
+    # only if there is one), with U, I_exc, Q_exc, E_exc at each.
+    k_pk = current_peaks(i_exc)
     times = {"fj": t_final_jump(t_sync, i_exc, k_pk[0]), "Ip1": float(t_sync[k_pk[0]])}
     if len(k_pk) > 1:
         times["Ip2"] = float(t_sync[k_pk[1]])
+    # li (leader inception) on C2, lower noise than C4, same I_c; search up to fj or C2 near its ceiling, whichever is first.
+    i_c2 = currents["C2"]
+    k_end = min(int(np.searchsorted(t_sync, times["fj"])), int(np.argmax(i_c2 >= LI_C2_CEILING * i_c2.max())))
+    t_li = t_steady_rise(t_sync, i_c2 - i_c, k_end)
+    if t_li is not None:  # None if the rise already runs at t_sync = 0
+        times["li"] = t_li
     events = {}
     for name, te in times.items():
         at = lambda x: float(np.interp(te, t_sync, x))  # value of a waveform at the event time
