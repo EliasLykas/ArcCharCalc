@@ -55,17 +55,28 @@ class Breakdown:
     waveforms: dict[str, np.ndarray]
 
 
-def process_withstand(t_w: np.ndarray, ch_w: dict[str, np.ndarray], w_level: str, w_shot: int, polarity: int) -> Withstand:
-    """Phase A: align the withstand shot on the double exponential (tau_A) and get C_g from its front.
+def align_withstand(t_w: np.ndarray, ch_w: dict[str, np.ndarray], polarity: int) -> float:
+    """Phase A, the automatic part (`match`): shift tau_A (us) of the withstand shot onto the double exponential.
+
+    Kept apart from `process_withstand` so that tau_A can be corrected by hand (GUI) before processing.
+    t_w, ch_w: time (us) and raw channels (V) of the withstand shot, as `read_shot`/`load_shot` give them.
+    """
+    t_end_w = offset_window_end(t_w, ch_w["C3"])
+    u_w = polarity * voltage_kv(t_w, ch_w["C3"], t_end_w)
+    tau_a, _, _ = match(t_w, u_w, t_w, u_w.max() * double_exp_pu(t_w), 1)  # u_w is already positive
+    return float(tau_a)
+
+
+def process_withstand(
+    t_w: np.ndarray, ch_w: dict[str, np.ndarray], w_level: str, w_shot: int, polarity: int, tau_a: float
+) -> Withstand:
+    """Phase A for a given tau_A (from `align_withstand`): T1, C_g from the front, and the t_sync axis t_w - tau_A.
 
     t_w, ch_w: time (us) and raw channels (V) of the withstand shot, as `read_shot`/`load_shot` give them.
     """
-    # Phase A: create the reference from the withstand shot, on its own t_sync axis (Phase A).
     t_end_w = offset_window_end(t_w, ch_w["C3"])  # one offset window for all withstand channels
     u_w = polarity * voltage_kv(t_w, ch_w["C3"], t_end_w)
     up_w = u_w.max()
-    double_exp_ref = up_w * double_exp_pu(t_w)
-    tau_ref, _, _ = match(t_w, u_w, t_w, double_exp_ref, 1)  # u_w is already positive
     t1_w = front_time(t_w, u_w, up_w)
 
     # Geometric capacitance C_g: Q = C_g * U on the withstand front, from the onset to the first 90 % of Up.
@@ -80,12 +91,30 @@ def process_withstand(t_w: np.ndarray, ch_w: dict[str, np.ndarray], w_level: str
     # print(f"C_g from C4 (pF): {c_g * 1000:.2f} +/- {cg_se * 1000:.2f}, "
     #       f"free intercept: {slope * 1000:.2f} pF, intercept {intercept:+.4f} uC")
 
-    t_w_sync = t_w - tau_ref  # align the withstand on its own t_sync axis
-    return Withstand(w_level, w_shot, t_w_sync, u_w, up_w, c_g, tau_ref, t1_w, q_w)
+    t_w_sync = t_w - tau_a  # align the withstand on its own t_sync axis
+    return Withstand(w_level, w_shot, t_w_sync, u_w, up_w, c_g, tau_a, t1_w, q_w)
 
 
-def process_breakdown(t: np.ndarray, channels: dict[str, np.ndarray], level: str, shot: int, polarity: int, w: Withstand) -> Breakdown:
-    """Phase B and Phase 3-4: align the shot on the withstand (tau_B), get I_exc, Q_exc, E_exc and the events.
+def align_breakdown(
+    t: np.ndarray, channels: dict[str, np.ndarray], level: str, polarity: int, w: Withstand
+) -> tuple[float, float]:
+    """Phase B, the automatic part (`match`): amplitude (kV) of the scaled withstand reference and shift tau_B (us).
+
+    Kept apart from `process_breakdown` so that both can be corrected by hand (GUI) before processing.
+    t, channels: time (us) and raw channels (V) of the breakdown shot, as `read_shot`/`load_shot` give them.
+    """
+    u = voltage_kv(t, channels["C3"], offset_window_end(t, channels["C3"]))
+    up = (polarity * u).max()  # with polarity, so it is also right for negative shots
+    amplitude = breakdown_amplitude(up, w.up * float(level) / float(w.level))
+    tau_b, _, _ = match(t, u, w.t_sync, amplitude * w.u / w.up, polarity)  # reference scaled to the amplitude
+    return float(amplitude), float(tau_b)
+
+
+def process_breakdown(
+    t: np.ndarray, channels: dict[str, np.ndarray], level: str, shot: int, polarity: int, w: Withstand,
+    amplitude: float, tau_b: float,
+) -> Breakdown:
+    """Phase B and Phase 3-4 for a given amplitude and tau_B (from `align_breakdown`): I_exc, Q_exc, E_exc and the events.
 
     t, channels: time (us) and raw channels (V) of the breakdown shot, as `read_shot`/`load_shot` give them.
     """
@@ -102,12 +131,8 @@ def process_breakdown(t: np.ndarray, channels: dict[str, np.ndarray], level: str
     # print(f"\nOffset window end (us): {t_end:.3f}")
     # print(f"C3 baseline: mean {mean:.4f} V, std {std:.4f} V, half difference {halves:+.4f} V")
 
-    # Phase B: match the measurement to the withstand reference, scaled to the measured peak.
     up = (polarity * u).max()  # with polarity, so it is also right for negative shots
-    up_expected = w.up * float(level) / float(w.level)
-    amplitude = breakdown_amplitude(up, up_expected)
-    u_ref = amplitude * w.u / w.up  # scale the withstand reference to the measured peak
-    tau_b, _, _ = match(t, u, w.t_sync, u_ref, polarity)
+    u_ref = amplitude * w.u / w.up  # the withstand reference scaled to the amplitude, as in align_breakdown
     try:
         t1 = front_time(t, polarity * u, amplitude)  # expected peak if chopped on the front
     except ValueError:  # breakdown before 90 % of the peak

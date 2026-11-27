@@ -13,7 +13,7 @@ from arccharcalc.db import (
     save_withstand,
     start_run,
 )
-from arccharcalc.pipeline import process_breakdown, process_withstand
+from arccharcalc.pipeline import align_breakdown, align_withstand, process_breakdown, process_withstand
 from arccharcalc.report import export_csv, plot_run, print_run
 
 USAGE = ("usage: arccharcalc <database file> <campaign> <level> <shot> <withstand level> <withstand shot>\n"
@@ -82,9 +82,13 @@ def main() -> None:
     polarity = campaign_polarity(con, campaign)
     with con:  # one transaction: the whole run is stored, or nothing if anything fails
         run_id = start_run(con, campaign, w_level, int(w_shot))
-        withstand = process_withstand(*load_shot(con, campaign, w_level, int(w_shot)), w_level, int(w_shot), polarity)
+        t_w, ch_w = load_shot(con, campaign, w_level, int(w_shot))
+        tau_a = align_withstand(t_w, ch_w, polarity)
+        withstand = process_withstand(t_w, ch_w, w_level, int(w_shot), polarity, tau_a)
         save_withstand(con, run_id, campaign, withstand)
-        breakdown = process_breakdown(*load_shot(con, campaign, level, int(shot)), level, int(shot), polarity, withstand)
+        t, channels = load_shot(con, campaign, level, int(shot))
+        amplitude, tau_b = align_breakdown(t, channels, level, polarity, withstand)
+        breakdown = process_breakdown(t, channels, level, int(shot), polarity, withstand, amplitude, tau_b)
         save_breakdown(con, run_id, campaign, breakdown)
     print(f"\nStored as run {run_id} in {db_file}")
     _show_run(con, run_id)  # what is printed and plotted is what the database holds
