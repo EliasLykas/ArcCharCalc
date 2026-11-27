@@ -36,6 +36,7 @@ class Withstand:
     c_g: float  # nF, from current channel "C4"
     tau: float  # μs, tau_A (shift onto the double exponential)
     t1: float  # μs, front time 1.67 * (t90 - t30)
+    q: np.ndarray | None  # μC, charge from C4 from the onset (for the Q-V plot); None in runs stored before 2026-11-27
 
 
 @dataclass(frozen=True)
@@ -80,7 +81,7 @@ def process_withstand(t_w: np.ndarray, ch_w: dict[str, np.ndarray], w_level: str
     #       f"free intercept: {slope * 1000:.2f} pF, intercept {intercept:+.4f} uC")
 
     t_w_sync = t_w - tau_ref  # align the withstand on its own t_sync axis
-    return Withstand(w_level, w_shot, t_w_sync, u_w, up_w, c_g, tau_ref, t1_w)
+    return Withstand(w_level, w_shot, t_w_sync, u_w, up_w, c_g, tau_ref, t1_w, q_w)
 
 
 def process_breakdown(t: np.ndarray, channels: dict[str, np.ndarray], level: str, shot: int, polarity: int, w: Withstand) -> Breakdown:

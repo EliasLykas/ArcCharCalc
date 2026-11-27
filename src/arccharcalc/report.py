@@ -8,7 +8,7 @@ import numpy as np
 from arccharcalc.features import front_time
 from arccharcalc.generator import double_exp_pu
 from arccharcalc.pipeline import Breakdown, Withstand
-from arccharcalc.plotting import plot_current_voltage, plot_events, plot_waveform
+from arccharcalc.plotting import plot_current_voltage, plot_events, plot_qv, plot_waveform
 
 # Columns of the exported CSV, in this order, with their units. Given explicitly, because the order of
 # the waveforms read from the database is not guaranteed.
@@ -59,6 +59,8 @@ def plot_run(w: Withstand, breakdowns: list[Breakdown]) -> None:
                   f"Withstand shot {w.level}kV, shot: {w.shot}, Up (kV): {w.up:.3f}, tau_A (us): {w.tau:+.4f}, "
                   "in reference to a perfect double exponential", label_1="Withstand", label_2="Double exponential")
  """
+    if w.q is not None:  # runs stored before 2026-11-27 have no withstand charge
+        plot_qv(w.u, w.q, w.c_g, f"Q-V of withstand shot {w.level}kV/{w.shot} (C4)")
     for b in breakdowns:
         wf, name = b.waveforms, f"breakdown shot {b.level}kV/{b.shot}"
         t_sync = wf["t_sync"]

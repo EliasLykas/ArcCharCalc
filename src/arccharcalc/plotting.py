@@ -108,3 +108,25 @@ def plot_current_voltage(
     lines = line_i + line_u  # one legend for the lines of both axes
     ax_i.legend(lines, [line.get_label() for line in lines])
     return fig, ax_i, ax_u
+
+
+def plot_qv(u: np.ndarray, q: np.ndarray, c_g: float, title: str) -> tuple[Figure, Axes]:
+    """Plot the Q-V curve of the withstand shot and the fitted line Q = C_g * U, to check C_g by eye.
+
+    u (kV, positive) and q (μC) on the same samples; c_g in nF (μC/kV = nF).
+    The fit window of `process_withstand` ends at the first sample at 90 % of Up: those samples are drawn
+    in colour, the rest (peak and tail) in grey. Samples before the onset sit at the origin, so they need no mask.
+    Not shown here, like plot_waveform.
+    """
+    k90 = np.argmax(u >= 0.9 * u.max())  # first sample at 90 %, as in process_withstand
+    fig, ax = plt.subplots(figsize=(7, 6))
+    ax.plot(u[k90:], q[k90:], color="0.6", label="Rest of the shot")
+    ax.plot(u[: k90 + 1], q[: k90 + 1], color="C0", label="Fit window (front, to 90 % of Up)")
+    u_line = np.array([0.0, u.max()])
+    ax.plot(u_line, c_g * u_line, color="C3", linestyle="--", label=f"Q = C_g U, C_g = {c_g * 1000:.2f} pF")
+    ax.set_title(title)
+    ax.set_xlabel("Voltage (kV)")
+    ax.set_ylabel("Charge (μC)")
+    ax.grid(True)
+    ax.legend()
+    return fig, ax

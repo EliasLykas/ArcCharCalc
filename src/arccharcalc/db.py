@@ -141,13 +141,13 @@ def _save_waveforms(con: sqlite3.Connection, run_id: int, shot_id: int, waveform
 
 
 def save_withstand(con: sqlite3.Connection, run_id: int, campaign: str, w: Withstand) -> None:
-    """Store the Phase A results of the withstand shot: Up, T1, tau_A, C_g and the waveforms t_sync, u."""
+    """Store the Phase A results of the withstand shot: Up, T1, tau_A, C_g and the waveforms t_sync, u, q_c4."""
     shot_id = _shot_id(con, campaign, w.level, w.shot)
     con.execute(
         "INSERT INTO shot_result (run_id, shot_id, up_kv, t1_us, tau_us, cg_c2_nf, cg_c4_nf) VALUES (?, ?, ?, ?, ?, ?, ?)",
         (run_id, shot_id, w.up, w.t1, w.tau, None, w.c_g),  # cg_c2_nf NULL: C_g only from C4 since 2026-11-24
     )
-    _save_waveforms(con, run_id, shot_id, {"t_sync": w.t_sync, "u": w.u})
+    _save_waveforms(con, run_id, shot_id, {"t_sync": w.t_sync, "u": w.u, "q_c4": w.q})
 
 
 def save_breakdown(con: sqlite3.Connection, run_id: int, campaign: str, b: Breakdown) -> None:
@@ -182,7 +182,7 @@ def load_withstand(con: sqlite3.Connection, run_id: int) -> Withstand:
         raise ValueError(f"Run {run_id} is not in the database")
     shot_id, level, number, up, t1, tau, cg_c4 = row
     wf = _load_waveforms(con, run_id, shot_id)
-    return Withstand(level, number, wf["t_sync"], wf["u"], up, cg_c4, tau, t1)
+    return Withstand(level, number, wf["t_sync"], wf["u"], up, cg_c4, tau, t1, wf.get("q_c4"))  # no q_c4 in old runs
 
 
 def load_breakdowns(con: sqlite3.Connection, run_id: int) -> list[Breakdown]:
